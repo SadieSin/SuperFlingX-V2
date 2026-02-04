@@ -1,5 +1,6 @@
--- SuperFlingX - Dark Pro Edition 2026 (with Sadie’s Working.lua flight + Farm Kill restored + GODMODE)
--- Walk starts 25 • fly starts 80 • max 2000 • W forward S backward A left D right E up Q down
+﻿-- SuperFlingX - Dark Pro Edition 2026 (with Sadie’s Working.lua flight + Farm Kill restored)
+-- Walk starts 25 • fly starts 80 • max 2000 • W forward S backward A left D right Q toggle fly
+-- Vertical fly: Space up, LeftControl down (removed Q/E vertical)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,82 +8,6 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
-
--- ────────────────────────────────────────────────
--- GODMODE (2026 working variant - health lock + metatable protection)
--- ────────────────────────────────────────────────
-
-local function applyGodmode(char)
-    task.wait(0.35)
-    local humanoid = char:WaitForChild("Humanoid", 6)
-    if not humanoid then return end
-
-    humanoid.MaxHealth = 1e7
-    humanoid.Health = 1e7
-    humanoid.WalkSpeed = 25  -- will be overwritten by slider later if needed
-
-    -- HealthChanged force restore
-    humanoid:GetPropertyChangedSignal("Health"):Connect(function()
-        if humanoid.Health < humanoid.MaxHealth then
-            humanoid.Health = humanoid.MaxHealth
-        end
-    end)
-
-    -- Metatable hook to block TakeDamage and death state
-    local mt = getrawmetatable(game)
-    local oldNamecall = mt.__namecall
-
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if self == humanoid then
-            if method == "TakeDamage" then
-                return -- block damage
-            end
-            if method == "ChangeState" and ... == Enum.HumanoidStateType.Dead then
-                return -- block death
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
-
-    -- Periodic full heal (helps against games that bypass ChangeState)
-    task.spawn(function()
-        while char.Parent and humanoid.Parent do
-            humanoid.MaxHealth = 1e7
-            humanoid.Health = 1e7
-            task.wait(1.2)
-        end
-    end)
-end
-
--- Apply godmode on spawn & respawn
-LocalPlayer.CharacterAdded:Connect(applyGodmode)
-
--- Apply immediately if character already loaded
-if LocalPlayer.Character then
-    task.spawn(function()
-        applyGodmode(LocalPlayer.Character)
-    end)
-end
-
--- Optional: disable obvious damage scripts (uncomment if needed - may trigger anti-cheat)
---[[
-task.spawn(function()
-    while true do
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Script") or obj:IsA("LocalScript") then
-                local name = obj.Name:lower()
-                if name:find("damage") or name:find("hurt") or name:find("kill") or name:find("void") then
-                    obj.Disabled = true
-                end
-            end
-        end
-        task.wait(6)
-    end
-end)
---]]
 
 if game.CoreGui:FindFirstChild("SuperFling") then
     game.CoreGui.SuperFling:Destroy()
@@ -348,7 +273,7 @@ local funnyTab   = createTab("Funny",   theme.accent_yellow)
 local welcomeLabel = Instance.new("TextLabel")
 welcomeLabel.Size = UDim2.new(1, 0, 0, 220)
 welcomeLabel.BackgroundTransparency = 1
-welcomeLabel.Text = "Welcome to Super Fling X!\n\nThank you for using our pro edition.\nHave fun flinging, flying, farming & surviving!\nCrafted by SadieSin in 2026."
+welcomeLabel.Text = "Welcome to Super Fling X!\n\nThank you for using our pro edition.\nHave fun flinging, flying, and farming!\nCrafted by SadieSin in 2026."
 welcomeLabel.TextColor3 = theme.text_dark
 welcomeLabel.TextSize = 20
 welcomeLabel.Font = Enum.Font.Gotham
@@ -855,7 +780,7 @@ Players.PlayerAdded:Connect(function(player)
             task.wait(1)
             pcall(applyESPToPlayer, player)
         end)
-    end)
+    end
 end)
 
 for _, player in ipairs(Players:GetPlayers()) do
@@ -870,7 +795,7 @@ for _, player in ipairs(Players:GetPlayers()) do
 end
 
 -- ────────────────────────────────────────────────
--- Player list update function
+-- Player list update function (only called when players change)
 -- ────────────────────────────────────────────────
 
 local function updateList(scrollFrame)
@@ -935,6 +860,7 @@ local function updateList(scrollFrame)
                     table.insert(selectedPlayers, p)
                 end
 
+                -- Update only this button
                 local nowSelected = table.find(selectedPlayers, p) ~= nil
                 TweenService:Create(b, TweenInfo.new(0.15), {
                     BackgroundColor3 = nowSelected and theme.player_sel or theme.player_unsel,
@@ -1074,6 +1000,74 @@ local function createButton(parent, text, desc, onClick)
 end
 
 -- ────────────────────────────────────────────────
+-- GODMODE (hookmetamethod + death disconnect + script disable)
+-- ────────────────────────────────────────────────
+
+local godmodeActive = false
+local oldNamecall
+
+local function enableGodmode()
+    if godmodeActive then return end
+    godmodeActive = true
+
+    -- Hook :TakeDamage, :BreakJoints, Kill related calls
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        if not checkcaller() then
+            local method = getnamecallmethod()
+            if self == LocalPlayer.Character or self.Parent == LocalPlayer.Character then
+                if method:find("Damage") or method == "BreakJoints" or method:find("Kill") or method == "TakeDamage" then
+                    return
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+
+    -- Disconnect death / ragdoll signals and disable local scripts
+    local function protectCharacter(char)
+        if not char then return end
+        local hum = char:FindFirstChildWhichIsA("Humanoid")
+        if hum then
+            for _, conn in ipairs(getconnections(hum.Died)) do
+                conn:Disable()
+            end
+            for _, conn in ipairs(getconnections(hum.HealthChanged)) do
+                conn:Disable()
+            end
+            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            hum.HealthChanged:Connect(function(h)
+                if h < 1 then
+                    hum.Health = hum.MaxHealth
+                end
+            end)
+        end
+
+        -- Disable localscripts in character
+        for _, v in ipairs(char:GetDescendants()) do
+            if v:IsA("LocalScript") then
+                v.Disabled = true
+                pcall(function() v.Parent = nil end)
+            end
+        end
+    end
+
+    if LocalPlayer.Character then
+        protectCharacter(LocalPlayer.Character)
+    end
+    LocalPlayer.CharacterAdded:Connect(protectCharacter)
+end
+
+-- Add godmode toggle to Player tab
+createToggle(playerTab, "GODMODE", "Enable godmode (damage block + script disable)", function(active)
+    if active then
+        enableGodmode()
+    else
+        warn("[SuperFlingX] Godmode cannot be fully disabled once enabled")
+    end
+end)
+
+-- ────────────────────────────────────────────────
 -- Player Tab
 -- ────────────────────────────────────────────────
 
@@ -1162,7 +1156,7 @@ createButton(playerTab, "RESET SPEEDS", "Reset fly and walk speeds to defaults."
     end
 end)
 
-local updateFlyToggle = createToggle(playerTab, "FLY", "Toggle flying (WASD EQ).", function(active)
+local updateFlyToggle = createToggle(playerTab, "FLY", "Toggle flying (WASD Space/Ctrl). Q keybind to toggle.", function(active)
     FLYING = active
     if FLYING then
         local char = LocalPlayer.Character
@@ -1192,8 +1186,8 @@ local updateFlyToggle = createToggle(playerTab, "FLY", "Toggle flying (WASD EQ).
             if input.KeyCode == Enum.KeyCode.S then keys.Backward = true end
             if input.KeyCode == Enum.KeyCode.A then keys.Left = true end
             if input.KeyCode == Enum.KeyCode.D then keys.Right = true end
-            if input.KeyCode == Enum.KeyCode.E then keys.Up = true end
-            if input.KeyCode == Enum.KeyCode.Q then keys.Down = true end
+            if input.KeyCode == Enum.KeyCode.Space then keys.Up = true end
+            if input.KeyCode == Enum.KeyCode.LeftControl then keys.Down = true end
         end)
 
         local inputEndedConn = UserInputService.InputEnded:Connect(function(input)
@@ -1201,8 +1195,8 @@ local updateFlyToggle = createToggle(playerTab, "FLY", "Toggle flying (WASD EQ).
             if input.KeyCode == Enum.KeyCode.S then keys.Backward = false end
             if input.KeyCode == Enum.KeyCode.A then keys.Left = false end
             if input.KeyCode == Enum.KeyCode.D then keys.Right = false end
-            if input.KeyCode == Enum.KeyCode.E then keys.Up = false end
-            if input.KeyCode == Enum.KeyCode.Q then keys.Down = false end
+            if input.KeyCode == Enum.KeyCode.Space then keys.Up = false end
+            if input.KeyCode == Enum.KeyCode.LeftControl then keys.Down = false end
         end)
 
         flyLoop = RunService.RenderStepped:Connect(function()
@@ -1242,6 +1236,14 @@ local updateFlyToggle = createToggle(playerTab, "FLY", "Toggle flying (WASD EQ).
         if char and char:FindFirstChild("Humanoid") then
             char.Humanoid.PlatformStand = false
         end
+    end
+end)
+
+-- Add Q keybind to toggle fly
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.Q then
+        updateFlyToggle(not FLYING)
     end
 end)
 
@@ -1541,4 +1543,4 @@ end)
 -- Open home tab by default
 tabs["Home"].MouseButton1Click:Fire()
 
-print("SuperFlingX Dark Pro Edition 2026 + GODMODE loaded")
+print("SuperFlingX Dark Pro Edition 2026 loaded — improved player list selection UI")

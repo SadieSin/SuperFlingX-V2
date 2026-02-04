@@ -84,10 +84,6 @@ task.spawn(function()
 end)
 --]]
 
--- ────────────────────────────────────────────────
--- Rest of your original script (UI + features)
--- ────────────────────────────────────────────────
-
 if game.CoreGui:FindFirstChild("SuperFling") then
     game.CoreGui.SuperFling:Destroy()
 end
@@ -1366,6 +1362,7 @@ selectAllBtn.MouseButton1Click:Connect(function()
         end
     end
     
+    -- Update existing buttons instantly
     for player, button in pairs(playerButtons) do
         local isSel = table.find(selectedPlayers, player) ~= nil
         TweenService:Create(button, TweenInfo.new(0.15), {
@@ -1392,6 +1389,7 @@ deselectAllCorner.CornerRadius = UDim.new(0, 12)
 deselectAllBtn.MouseButton1Click:Connect(function()
     selectedPlayers = {}
     
+    -- Update existing buttons instantly
     for _, button in pairs(playerButtons) do
         TweenService:Create(button, TweenInfo.new(0.15), {
             BackgroundColor3 = theme.player_unsel,
@@ -1438,8 +1436,9 @@ playerListLayout.Parent = playerScroll
 -- Initial population
 updateList(playerScroll)
 
+-- Update list only when players actually join/leave
 Players.PlayerAdded:Connect(function()
-    task.wait(0.3)
+    task.wait(0.3) -- small delay to let character load if needed
     updateList(playerScroll)
 end)
 
@@ -1514,7 +1513,7 @@ createButton(funnyTab, "SET SPAWN", "Set current position as spawn.", setSpawnPo
 createButton(funnyTab, "TP SPAWN", "Teleport to spawn point.", teleportToSpawnPoint)
 
 -- ────────────────────────────────────────────────
--- Reset on character respawn (godmode already handled above)
+-- Reset on character respawn
 -- ────────────────────────────────────────────────
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
